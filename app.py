@@ -4,7 +4,9 @@ from datetime import date, timedelta
 from flask import Flask, jsonify, render_template, request
 from flask_sqlalchemy import SQLAlchemy
 
-from content import PAIRS, UNITS
+from sqlalchemy import inspect, text
+
+from content import LEVELS, PAIRS, UNITS
 
 app = Flask(__name__)
 
@@ -21,13 +23,15 @@ db = SQLAlchemy(app)
 
 # Repaso espaciado (cajas de Leitner): días hasta el próximo repaso según la caja.
 INTERVALS = {1: 1, 2: 2, 3: 4, 4: 7, 5: 15}
-PHRASE_IDS = [p["id"] for u in UNITS for p in u["phrases"]]
+LEVEL_IDS = {lv["id"]: [p["id"] for u in UNITS if u["level"] == lv["id"] for p in u["phrases"]] for lv in LEVELS}
+DEFAULT_LEVEL = 2
 
 
 class Profile(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(40), nullable=False)
     avatar = db.Column(db.String(8), nullable=False, default="🙂")
+    level = db.Column(db.Integer, nullable=False, default=DEFAULT_LEVEL, server_default="2")
 
 
 class Progress(db.Model):
@@ -51,6 +55,18 @@ class DayLog(db.Model):
 
 with app.app_context():
     db.create_all()
+    # Bases creadas antes de que existieran los niveles: agregar la columna sin tocar los datos.
+    if "level" not in [c["name"] for c in inspect(db.engine).get_columns("profile")]:
+        db.session.execute(text("ALTER TABLE profile ADD COLUMN level INTEGER NOT NULL DEFAULT 2"))
+        db.session.commit()
+
+
+def clean_level(value):
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_LEVEL
+    return value if value in LEVEL_IDS else DEFAULT_LEVEL
 
 
 def get_day(value):
@@ -73,6 +89,7 @@ def summary(profile, day):
         "id": profile.id,
         "name": profile.name,
         "avatar": profile.avatar,
+        "level": profile.level,
         "streak": streak,
         "today_points": days.get(day, 0),
         "total_points": sum(days.values()),
@@ -86,7 +103,7 @@ def index():
 
 @app.route("/api/content")
 def content():
-    return jsonify({"units": UNITS, "pairs": PAIRS})
+    return jsonify({"units": UNITS, "pairs": PAIRS, "levels": LEVELS})
 
 
 @app.route("/api/profiles", methods=["GET", "POST"])
@@ -97,7 +114,7 @@ def profiles():
         name = str(data.get("name", "")).strip()[:40]
         if not name:
             return jsonify({"error": "Escribe un nombre"}), 400
-        p = Profile(name=name, avatar=str(data.get("avatar", "🙂"))[:8] or "🙂")
+        p = Profile(name=name, avatar=str(data.get("avatar", "🙂"))[:8] or "🙂", level=clean_level(data.get("level")))
         db.session.add(p)
         db.session.commit()
         return jsonify(summary(p, day))
@@ -114,6 +131,14 @@ def delete_profile(pid):
     return jsonify({"ok": True})
 
 
+@app.route("/api/profiles/<int:pid>/level", methods=["POST"])
+def set_level(pid):
+    p = db.get_or_404(Profile, pid)
+    p.level = clean_level((request.get_json(silent=True) or {}).get("level"))
+    db.session.commit()
+    return jsonify({"ok": True, "level": p.level})
+
+
 @app.route("/api/profiles/<int:pid>/state")
 def state(pid):
     p = db.get_or_404(Profile, pid)
@@ -121,21 +146,23 @@ def state(pid):
     rows = Progress.query.filter_by(profile_id=pid).all()
     out = summary(p, day)
     out["progress"] = {r.item_id: {"box": r.box, "best": r.best} for r in rows}
-    out["due_count"] = sum(1 for r in rows if r.item_id in PHRASE_IDS and r.due and r.due <= day)
+    ids = LEVEL_IDS[clean_level(p.level)]
+    out["due_count"] = sum(1 for r in rows if r.item_id in ids and r.due and r.due <= day)
     return jsonify(out)
 
 
 @app.route("/api/profiles/<int:pid>/daily")
 def daily(pid):
-    db.get_or_404(Profile, pid)
+    p = db.get_or_404(Profile, pid)
+    ids = LEVEL_IDS[clean_level(p.level)]
     day = get_day(request.args.get("day"))
     rows = Progress.query.filter_by(profile_id=pid).all()
     seen = {r.item_id for r in rows}
     due = sorted(
-        (r for r in rows if r.item_id in PHRASE_IDS and r.due and r.due <= day),
+        (r for r in rows if r.item_id in ids and r.due and r.due <= day),
         key=lambda r: r.due,
     )[:6]
-    new = [i for i in PHRASE_IDS if i not in seen][: 10 - len(due) if len(due) < 6 else 4]
+    new = [i for i in ids if i not in seen][: 10 - len(due) if len(due) < 6 else 4]
     return jsonify([r.item_id for r in due] + new)
 
 

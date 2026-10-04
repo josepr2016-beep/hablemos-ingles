@@ -67,3 +67,9 @@ input[type=text] { font: inherit; width: 100%; padding: 12px; border: 1px solid 
 .bub.me { align-self: flex-end; background: #ccfbf1; }
 .bub small { margin-top: 2px; }
 @media (max-width: 420px) { .en { font-size: 23px; } .stats span { padding: 5px 9px; } }
+.lbl { margin: 14px 0 6px; font-weight: 600; }
+.lvs { display: grid; gap: 8px; }
+.lvs.row3 { grid-template-columns: repeat(3, 1fr); }
+.lv { background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; text-align: left; min-height: 44px; }
+.row3 .lv { text-align: center; padding: 10px 4px; }
+.lv.sel { border-color: var(--pri); background: #ccfbf1; }

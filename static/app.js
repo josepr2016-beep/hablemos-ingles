@@ -31,7 +31,8 @@ function pickVoice() {
     || vs.find((v) => v.lang === 'en-US') || vs.find((v) => v.lang.startsWith('en')) || null;
 }
 if (hasTTS) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
-function say(text, rate = 0.95) {
+let baseRate = 0.95; // más lento en el nivel Inicial
+function say(text, rate = baseRate) {
   return new Promise((res) => {
     if (!hasTTS) return res();
     speechSynthesis.cancel();
@@ -73,6 +74,7 @@ const CONTR = {
   "i'm": 'i am', "you're": 'you are', "we're": 'we are', "they're": 'they are', "he's": 'he is', "she's": 'she is',
   "it's": 'it is', "that's": 'that is', "what's": 'what is', "where's": 'where is', "who's": 'who is', "how's": 'how is',
   "there's": 'there is', "don't": 'do not', "doesn't": 'does not', "isn't": 'is not', "aren't": 'are not',
+  "didn't": 'did not', "haven't": 'have not', "wasn't": 'was not', "won't": 'will not', "couldn't": 'could not', "wouldn't": 'would not',
   "can't": 'can not', cannot: 'can not', "i'll": 'i will', "i'd": 'i would', "let's": 'let us', "i've": 'i have',
 };
 const NUM = { 0: 'zero', 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 40: 'forty' };
@@ -119,6 +121,8 @@ function paint(root, ok) {
 }
 
 /* ---------- Perfiles ---------- */
+const lvl = (id) => C.levels.find((l) => l.id === id) || C.levels[1];
+const levelBtns = (sel) => C.levels.map((l) => `<button class="lv ${l.id === sel ? 'sel' : ''}" data-l="${l.id}"><b>${l.emoji} ${l.name}</b><small>${esc(l.desc)}</small></button>`).join('');
 const AVATARS = ['🙂', '😎', '🦊', '🐼', '🦁', '🐸', '🦄', '🚀', '⚽', '🌟'];
 async function loadProfiles() {
   runId++; hush(); P = null;
@@ -128,23 +132,25 @@ async function loadProfiles() {
     <div class="hero"><h1>Hablemos Inglés</h1><p>Escucha, repite y conversa. Diez minutos al día.</p></div>
     <h3>¿Quién va a practicar?</h3>
     <div class="plist">
-      ${list.map((p) => `<button class="pcard" data-id="${p.id}"><span class="av">${esc(p.avatar)}</span><b>${esc(p.name)}</b><small>🔥 ${p.streak} · ⭐ ${p.total_points}</small></button>`).join('')}
+      ${list.map((p) => `<button class="pcard" data-id="${p.id}"><span class="av">${esc(p.avatar)}</span><b>${esc(p.name)}</b><small>${lvl(p.level).emoji} ${lvl(p.level).name} · 🔥 ${p.streak}</small></button>`).join('')}
       <button class="pcard add" id="add"><span class="av">＋</span><b>Nuevo perfil</b></button>
     </div>
     <div id="form"></div>`;
   app.querySelectorAll('.pcard[data-id]').forEach((b) => { b.onclick = () => openProfile(list.find((p) => p.id === Number(b.dataset.id))); });
   $('#add').onclick = () => {
-    let av = AVATARS[0];
+    let av = AVATARS[0]; let level = 2;
     $('#form').innerHTML = `<div class="card" style="margin-top:12px"><b>Nuevo perfil</b>
       <input type="text" id="nm" maxlength="40" placeholder="Nombre">
       <div class="row avs" style="justify-content:flex-start">${AVATARS.map((a, i) => `<button data-a="${a}" class="${i ? '' : 'sel'}">${a}</button>`).join('')}</div>
+      <p class="lbl">¿Desde qué nivel quiere empezar?</p><div class="lvs">${levelBtns(level)}</div>
       <button class="btn primary" id="save">Crear perfil</button></div>`;
+    app.querySelectorAll('.lv').forEach((b) => { b.onclick = () => { level = Number(b.dataset.l); app.querySelectorAll('.lv').forEach((x) => x.classList.toggle('sel', x === b)); }; });
     app.querySelectorAll('.avs button').forEach((b) => { b.onclick = () => { av = b.dataset.a; app.querySelectorAll('.avs button').forEach((x) => x.classList.toggle('sel', x === b)); }; });
     $('#nm').focus();
     $('#save').onclick = async () => {
       const name = $('#nm').value.trim();
       if (!name) { $('#nm').focus(); return; }
-      const p = await api(`/api/profiles?day=${today()}`, { name, avatar: av });
+      const p = await api(`/api/profiles?day=${today()}`, { name, avatar: av, level });
       if (p.id) openProfile(p);
     };
   };
@@ -160,13 +166,17 @@ async function loadHome() {
   runId++; hush(); Q = null;
   S = await api(`/api/profiles/${P.id}/state?day=${today()}`);
   const box = (id) => (S.progress[id] ? S.progress[id].box : 0);
+  P.level = S.level; baseRate = S.level === 1 ? 0.8 : 0.95;
+  const units = C.units.filter((u) => u.level === S.level);
   app.innerHTML = `
     <header class="hd"><button class="link" id="sw">${esc(P.avatar)} ${esc(P.name)} ▾</button>
       <div class="stats"><span title="Días seguidos">🔥 ${S.streak}</span><span title="Puntos">⭐ ${S.total_points}</span></div></header>
     ${SR ? '' : '<div class="warn">Este navegador no puede escucharte, así que no calificará tu pronunciación. Usa Chrome o Edge (computador y Android) o Safari (iPhone). Los ejercicios de escucha sí funcionan.</div>'}
     <button class="daily" id="daily"><b>▶ Práctica de hoy</b><small>${S.due_count ? `${S.due_count} frases para repasar y algunas nuevas` : 'Frases nuevas para escuchar y repetir'} · ${S.today_points} puntos hoy</small></button>
+    <h3>Nivel</h3><div class="lvs row3">${C.levels.map((l) => `<button class="lv ${l.id === S.level ? 'sel' : ''}" data-l="${l.id}"><b>${l.emoji} ${l.name}</b></button>`).join('')}</div>
+    <p class="hint" style="text-align:left">${esc(lvl(S.level).desc)} Puedes cambiarlo cuando quieras; el progreso de cada nivel se conserva.</p>
     <h3>Temas</h3>
-    ${C.units.map((u) => {
+    ${units.map((u) => {
       const done = u.phrases.filter((p) => box(p.id) >= 1).length;
       const solid = u.phrases.filter((p) => box(p.id) >= 3).length;
       return `<div class="card unit"><div class="uh"><span class="emo">${u.emoji}</span><div><b>${esc(u.title)}</b>
@@ -177,6 +187,7 @@ async function loadHome() {
       <div class="row"><button class="btn" id="pairs">Entrenar el oído</button></div></div>
     <p class="hint"><button class="link danger" id="del">Eliminar este perfil</button></p>`;
   $('#sw').onclick = loadProfiles;
+  app.querySelectorAll('.lv').forEach((b) => { b.onclick = async () => { await api(`/api/profiles/${P.id}/level`, { level: Number(b.dataset.l) }); loadHome(); }; });
   $('#daily').onclick = startDaily;
   $('#pairs').onclick = () => startSession(shuffle(C.pairs).slice(0, 8).map((p) => ({ type: 'pair', item: p })));
   app.querySelectorAll('[data-u]').forEach((b) => {
