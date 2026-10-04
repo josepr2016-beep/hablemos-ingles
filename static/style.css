@@ -73,3 +73,10 @@ input[type=text] { font: inherit; width: 100%; padding: 12px; border: 1px solid 
 .lv { background: #fff; border: 2px solid var(--line); border-radius: 12px; padding: 10px 12px; text-align: left; min-height: 44px; }
 .row3 .lv { text-align: center; padding: 10px 4px; }
 .lv.sel { border-color: var(--pri); background: #ccfbf1; }
+.lvs.row3 { grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); }
+.retos { margin-top: 8px; } .retos .btn { border-style: dashed; }
+.btn:disabled { opacity: .5; cursor: default; }
+.lock { margin-top: 8px; }
+.trophy { background: var(--warnbg); border-color: #fcd34d; }
+.veil .w { color: transparent; background: #5eead4; cursor: default; user-select: none; }
+#typed { flex: 1; min-width: 160px; margin: 0; }

@@ -1,6 +1,6 @@
 # Hablemos Inglés
 
-Aplicación web familiar para aprender inglés hablado y escuchado (tres niveles: Inicial, Básico e Intermedio).
+Aplicación web familiar para aprender inglés hablado y escuchado (cinco niveles, de Inicial a Avanzado).
 Flask + Postgres, pensada para desplegar en Render. Funciona en celular y computador.
 
 ## Qué hace

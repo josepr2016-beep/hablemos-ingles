@@ -75,9 +75,10 @@ const CONTR = {
   "it's": 'it is', "that's": 'that is', "what's": 'what is', "where's": 'where is', "who's": 'who is', "how's": 'how is',
   "there's": 'there is', "don't": 'do not', "doesn't": 'does not', "isn't": 'is not', "aren't": 'are not',
   "didn't": 'did not', "haven't": 'have not', "wasn't": 'was not', "won't": 'will not', "couldn't": 'could not', "wouldn't": 'would not',
+  "you'd": 'you would', "we'll": 'we will', "you'll": 'you will', "shouldn't": 'should not',
   "can't": 'can not', cannot: 'can not', "i'll": 'i will', "i'd": 'i would', "let's": 'let us', "i've": 'i have',
 };
-const NUM = { 0: 'zero', 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 40: 'forty' };
+const NUM = { 0: 'zero', 1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 20: 'twenty', 40: 'forty' };
 function normWord(w) {
   w = w.toLowerCase().replace(/[’`]/g, "'").replace(/[^a-z0-9']/g, '').replace(/^'+|'+$/g, '');
   if (!w) return [];
@@ -114,7 +115,7 @@ const scoreCls = (s) => (s >= 80 ? 'g' : s >= 50 ? 'm' : 'b');
 const scoreMsg = (s) => (s === 100 ? '¡Perfecto! Se entendió todo.' : s >= 80 ? '¡Muy bien! Casi todo se entendió.' : s >= 50 ? 'Vas bien. Repite las palabras en rojo.' : 'Escucha la frase lenta y vuelve a intentar.');
 const wordsHtml = (text) => text.split(/\s+/).map((w, i) => `<span class="w" data-i="${i}">${esc(w)}</span>`).join(' ');
 function wireWords(root) {
-  root.querySelectorAll('.w').forEach((el) => { el.onclick = () => say(el.textContent.replace(/[^A-Za-z' ]/g, ''), 0.8); });
+  root.querySelectorAll('.w').forEach((el) => { el.onclick = () => !el.closest('.veil') && say(el.textContent.replace(/[^A-Za-z' ]/g, ''), 0.8); });
 }
 function paint(root, ok) {
   root.querySelectorAll('.w').forEach((el, i) => { el.classList.remove('ok', 'no'); el.classList.add(ok[i] ? 'ok' : 'no'); });
@@ -168,6 +169,9 @@ async function loadHome() {
   const box = (id) => (S.progress[id] ? S.progress[id].box : 0);
   P.level = S.level; baseRate = S.level === 1 ? 0.8 : 0.95;
   const units = C.units.filter((u) => u.level === S.level);
+  const all = units.flatMap((u) => u.phrases); const seen = all.filter((p) => box(p.id) >= 1).length;
+  const nextLv = C.levels[C.levels.findIndex((l) => l.id === S.level) + 1];
+  const levelDone = seen >= 0.8 * all.length ? `<div class="card trophy">🏆 <b>Ya practicaste ${seen} de ${all.length} frases de este nivel.</b><br>Completa los retos${nextLv ? ` o pasa al nivel ${nextLv.emoji} ${esc(nextLv.name)}` : ''}.</div>` : '';
   app.innerHTML = `
     <header class="hd"><button class="link" id="sw">${esc(P.avatar)} ${esc(P.name)} ▾</button>
       <div class="stats"><span title="Días seguidos">🔥 ${S.streak}</span><span title="Puntos">⭐ ${S.total_points}</span></div></header>
@@ -175,13 +179,16 @@ async function loadHome() {
     <button class="daily" id="daily"><b>▶ Práctica de hoy</b><small>${S.due_count ? `${S.due_count} frases para repasar y algunas nuevas` : 'Frases nuevas para escuchar y repetir'} · ${S.today_points} puntos hoy</small></button>
     <h3>Nivel</h3><div class="lvs row3">${C.levels.map((l) => `<button class="lv ${l.id === S.level ? 'sel' : ''}" data-l="${l.id}"><b>${l.emoji} ${l.name}</b></button>`).join('')}</div>
     <p class="hint" style="text-align:left">${esc(lvl(S.level).desc)} Puedes cambiarlo cuando quieras; el progreso de cada nivel se conserva.</p>
-    <h3>Temas</h3>
+    ${levelDone}<h3>Temas</h3>
     ${units.map((u) => {
       const done = u.phrases.filter((p) => box(p.id) >= 1).length;
       const solid = u.phrases.filter((p) => box(p.id) >= 3).length;
+      const open1 = done >= 6; const open2 = box(u.dialogue.id) >= 1;
       return `<div class="card unit"><div class="uh"><span class="emo">${u.emoji}</span><div><b>${esc(u.title)}</b>
         <small>${done}/${u.phrases.length} practicadas · ${solid} dominadas</small><div class="meter"><i style="width:${(100 * done) / u.phrases.length}%"></i></div></div></div>
-        <div class="row"><button class="btn" data-u="${u.id}" data-m="speak">🎤 Hablar</button><button class="btn" data-u="${u.id}" data-m="listen">🎧 Escuchar</button><button class="btn" data-u="${u.id}" data-m="dialog">💬 Conversar</button></div></div>`;
+        <div class="row"><button class="btn" data-u="${u.id}" data-m="speak">🎤 Hablar</button><button class="btn" data-u="${u.id}" data-m="listen">🎧 Escuchar</button><button class="btn" data-u="${u.id}" data-m="dialog">💬 Conversar</button></div>
+        <div class="row retos"><button class="btn" data-u="${u.id}" data-m="blind" ${open1 ? '' : 'disabled'}>${open1 ? '🏅' : '🔒'} Reto de oído</button><button class="btn" data-u="${u.id}" data-m="dialogh" ${open2 ? '' : 'disabled'}>${open2 ? '🏅' : '🔒'} Conversar sin guion</button></div>
+        ${open1 && open2 ? '' : `<small class="lock">${open1 ? '' : 'Practica 6 frases para abrir el reto de oído. '}${open2 ? '' : 'Completa la conversación para abrirla sin guion.'}</small>`}</div>`;
     }).join('')}
     <div class="card unit"><div class="uh"><span class="emo">👂</span><div><b>Sonidos difíciles</b><small>ship / sheep, three / tree, very / berry…</small></div></div>
       <div class="row"><button class="btn" id="pairs">Entrenar el oído</button></div></div>
@@ -193,8 +200,8 @@ async function loadHome() {
   app.querySelectorAll('[data-u]').forEach((b) => {
     b.onclick = () => {
       const u = C.units.find((x) => x.id === b.dataset.u);
-      if (b.dataset.m === 'dialog') return renderDialog(u);
-      const items = b.dataset.m === 'listen' ? shuffle(u.phrases) : u.phrases;
+      if (b.dataset.m === 'dialog' || b.dataset.m === 'dialogh') return renderDialog(u, b.dataset.m === 'dialogh');
+      const items = b.dataset.m === 'speak' ? u.phrases : shuffle(u.phrases);
       startSession(items.map((p) => ({ type: b.dataset.m, item: p })));
     };
   });
@@ -205,7 +212,7 @@ async function loadHome() {
 }
 async function startDaily() {
   const ids = await api(`/api/profiles/${P.id}/daily?day=${today()}`);
-  const steps = ids.map((id, i) => ({ type: i % 3 === 0 ? 'listen' : 'speak', item: C.items[id] })).filter((s) => s.item);
+  const steps = ids.map((id, i) => ({ type: S.progress[id] && S.progress[id].box >= 2 ? 'blind' : i % 3 === 0 ? 'listen' : 'speak', item: C.items[id] })).filter((s) => s.item);
   if (!steps.length) return;
   startSession(steps);
 }
@@ -215,7 +222,7 @@ function startSession(steps) { runId++; Q = { steps, i: 0, scores: [] }; renderS
 function renderStep() {
   if (Q.i >= Q.steps.length) return renderSummary();
   const st = Q.steps[Q.i];
-  ({ speak: renderSpeak, listen: renderListen, pair: renderPair })[st.type](st.item);
+  ({ speak: renderSpeak, listen: renderListen, pair: renderPair, blind: renderBlind })[st.type](st.item);
 }
 function shell(inner, pct, label) {
   app.innerHTML = `<div class="top"><button class="link" id="quit" aria-label="Salir">✕</button><div class="bar"><i style="width:${pct}%"></i></div><span>${label}</span></div><div class="card ex">${inner}</div>`;
@@ -299,6 +306,41 @@ function renderListen(it) {
   say(it.en);
 }
 
+/* ---------- Reto de oído: escuchar sin ver el texto ni fichas ---------- */
+function renderBlind(it) {
+  let best = null; let shown = false;
+  qShell(`<p class="tag">🏅 Reto de oído: sin ayudas</p><p>Escucha y repite lo que oyes. El texto aparece después de responder.</p>
+    <div class="row"><button class="btn" id="play">🔊 Escuchar</button><button class="btn" id="slow">🐢 Lento</button></div>
+    <button class="mic" id="mic" aria-label="Hablar" ${SR ? '' : 'disabled'}>🎤</button>
+    <p class="hint" id="hint">${SR ? 'Toca el micrófono y repite la frase, o escríbela.' : 'Escribe la frase que escuchaste.'}</p>
+    <div class="row"><input type="text" id="typed" placeholder="Escribe lo que escuchaste" autocomplete="off" autocapitalize="off" spellcheck="false"><button class="btn" id="send">Comprobar</button></div>
+    <div id="fb"></div><button class="btn primary" id="next">Ver la respuesta →</button>`);
+  const reveal = (g) => {
+    shown = true;
+    $('#fb').innerHTML = `<div class="en" id="en">${wordsHtml(it.en)}</div><p class="es">${esc(it.es)}</p>${g ? `<p class="score ${scoreCls(g.score)}">${g.score}%</p><p class="hint">Entendí: “${esc(g.heard)}”</p>` : ''}`;
+    wireWords($('#en')); if (g) paint($('#en'), g.ok);
+    $('#next').textContent = 'Siguiente →';
+  };
+  const answer = (alts) => { const g = grade(it.en, alts); best = Math.max(best === null ? 0 : best, g.score); reveal(g); };
+  $('#play').onclick = () => say(it.en);
+  $('#slow').onclick = () => say(it.en, 0.6);
+  $('#send').onclick = () => { const t = $('#typed').value.trim(); if (t) answer([t]); };
+  $('#typed').onkeydown = (e) => { if (e.key === 'Enter') $('#send').click(); };
+  $('#next').onclick = () => { if (!shown) { best = best === null ? 20 : best; return reveal(null); } finishStep(it.id, best); };
+  $('#mic').onclick = async () => {
+    const my = runId; const mic = $('#mic');
+    if (mic.classList.contains('on')) return;
+    hush(); mic.classList.add('on'); $('#hint').textContent = 'Escuchando… habla ahora';
+    const r = await listen();
+    if (my !== runId || !$('#mic')) return;
+    mic.classList.remove('on');
+    if (!r.alts.length) { $('#hint').textContent = micMsg(r.error); return; }
+    $('#hint').textContent = 'Puedes intentar otra vez';
+    answer(r.alts);
+  };
+  say(it.en);
+}
+
 /* ---------- Ejercicio: sonidos difíciles ---------- */
 function renderPair(p) {
   const target = Math.random() < 0.5 ? p.a : p.b;
@@ -324,23 +366,23 @@ function renderPair(p) {
 }
 
 /* ---------- Conversación guiada ---------- */
-function renderDialog(u) {
+function renderDialog(u, hard) {
   const my = ++runId; hush();
   const L = u.dialogue.lines; const scores = []; let k = 0;
   const mine = L.filter((l) => l[0] === 'B').length;
-  shell(`<p class="tag">💬 Conversación: ${esc(u.title)}</p><div class="chat" id="chat"></div><div id="ctl"></div>`, 0, `0/${mine}`);
+  shell(`<p class="tag">${hard ? '🏅 Sin guion' : '💬 Conversación'}: ${esc(u.title)}</p>${hard ? '<p class="hint">Tu línea está oculta: guíate por el español y responde en inglés.</p>' : ''}<div class="chat" id="chat"></div><div id="ctl"></div>`, 0, `0/${mine}`);
   const alive = () => my === runId && $('#chat');
   async function step() {
     if (!alive()) return;
     if (k >= L.length) {
       const avg = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
-      if (avg !== null) await api(`/api/profiles/${P.id}/result`, { item_id: u.dialogue.id, score: avg, day: today() });
+      if (avg !== null) await api(`/api/profiles/${P.id}/result`, { item_id: hard ? `${u.id}h` : u.dialogue.id, score: avg, day: today() });
       Q = { steps: [], i: 0, scores: avg === null ? [] : [avg] };
       return renderSummary();
     }
     const [who, en, es] = L[k];
     const bub = document.createElement('div');
-    bub.className = `bub ${who === 'B' ? 'me' : ''}`;
+    bub.className = `bub ${who === 'B' ? 'me' : ''} ${hard && who === 'B' ? 'veil' : ''}`;
     bub.innerHTML = `<div class="ln">${wordsHtml(en)}</div><small>${esc(es)}</small>`;
     $('#chat').appendChild(bub); wireWords(bub);
     bub.scrollIntoView({ block: 'nearest' });
@@ -351,9 +393,9 @@ function renderDialog(u) {
     }
     let got = null;
     $('#ctl').innerHTML = `<button class="mic" id="mic" ${SR ? '' : 'disabled'}>🎤</button><p class="hint" id="hint">${SR ? 'Te toca: di tu línea' : 'Di tu línea en voz alta'}</p>
-      <div class="row"><button class="btn" id="hear">🔊 Oír mi línea</button><button class="btn" id="go">Continuar →</button></div>`;
-    $('#hear').onclick = () => say(en, 0.8);
-    $('#go').onclick = () => { if (got !== null) scores.push(got); k++; $('.top .bar i').style.width = `${(100 * scores.length) / mine}%`; $('.top span').textContent = `${scores.length}/${mine}`; step(); };
+      <div class="row"><button class="btn" id="hear">${hard ? '💡 Ver y oír mi línea' : '🔊 Oír mi línea'}</button><button class="btn" id="go">Continuar →</button></div>`;
+    $('#hear').onclick = () => { bub.classList.remove('veil'); say(en, 0.8); };
+    $('#go').onclick = () => { bub.classList.remove('veil'); if (got !== null) scores.push(got); k++; $('.top .bar i').style.width = `${(100 * scores.length) / mine}%`; $('.top span').textContent = `${scores.length}/${mine}`; step(); };
     $('#mic').onclick = async () => {
       const mic = $('#mic');
       if (mic.classList.contains('on')) return;
@@ -363,7 +405,7 @@ function renderDialog(u) {
       mic.classList.remove('on');
       if (!r.alts.length) { $('#hint').textContent = micMsg(r.error); return; }
       const g = grade(en, r.alts);
-      paint(bub, g.ok); got = Math.max(got || 0, g.score);
+      bub.classList.remove('veil'); paint(bub, g.ok); got = Math.max(got || 0, g.score);
       $('#hint').textContent = `${g.score}% · ${scoreMsg(g.score)}`;
     };
   }
